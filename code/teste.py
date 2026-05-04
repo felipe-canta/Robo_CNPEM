@@ -12,6 +12,9 @@ def radial_movement(current_pos, final_pos, velocity, passo_por_mm):
     current_pos e final_pos podem ser números (distância) ou coordenadas.
     O 'passo' aqui deve ser quanto 1mm vale em passos de motor.
     """
+
+    servo = input("Garra: 1 para ABRIR, 0 para FECHAR: ")
+
     # Se você passar apenas a distância total como 'final_pos' e 0 como 'current_pos':
     dist_total = final_pos - current_pos
 
@@ -20,7 +23,7 @@ def radial_movement(current_pos, final_pos, velocity, passo_por_mm):
 
     # Formato: speed1 steps1 speed2 steps2 latch
     # Rodas giram na mesma direção para frente
-    message = f"{velocity} {steps:.2f} {velocity} {steps:.2f} 1"
+    message = f"{velocity} {steps:.2f} {velocity} {steps:.2f} {servo}"
     return message
 
 
@@ -35,9 +38,11 @@ def tangent_movement(degrees, velocity, giro_const):
     elif degrees < -180:
         degrees += 360
 
+    servo = input("Garra: 1 para ABRIR, 0 para FECHAR: ")
+
     # Para girar no próprio eixo, uma roda vai para frente e a outra para trás
     steps = degrees * giro_const
 
     # Roda 1 (positiva), Roda 2 (negativa) para rotacionar
-    message = f"{velocity} {steps:.2f} {velocity} {-steps:.2f} 1"
+    message = f"{velocity} {steps:.2f} {velocity} {-steps:.2f} {servo}"
     return message

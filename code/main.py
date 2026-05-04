@@ -5,10 +5,6 @@ import time
 
 
 def enviar_comando(msg_do_teste):
-    """
-    Desmembra a string do teste.py e envia como parâmetros de URL para o Wemos.
-    Formato esperado da msg: "vA pA vX pX sA"
-    """
     url = "http://192.168.4.1/run"
     partes = msg_do_teste.split()
 
@@ -59,6 +55,7 @@ def exec():
         print("2 - Girar Robô (graus)")
         print("3 - Ajustar Velocidade")
         print("4 - Abrir/Fechar Garra (Servo)")
+        print("5 - Modo Livre")
         print("0 - Sair")
 
         try:
@@ -88,6 +85,14 @@ def exec():
                 estado = input("Garra: 1 para ABRIR, 0 para FECHAR: ")
                 # Envia comando parado (vel=0, passos=0) apenas para mexer o servo
                 msg = f"0 0 0 0 {estado}"
+                enviar_comando(msg)
+
+            elif opcao == "5":
+                servo, v1, p1, v2, p2 = input(
+                    "crie o um comando livre ( servo, velocidade1, passo1, velocidade2, passo2 ): "
+                ).split()
+                msg = f"{v1} {p1} {v2} {p2} {servo}"
+
                 enviar_comando(msg)
 
             else:

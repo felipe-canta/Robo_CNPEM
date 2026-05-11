@@ -4,145 +4,111 @@
 #include <Servo.h>
 
 // ==========================================
-// CONFIGURAÇÕES DA REDE
+// CONFIGURAÇÕES DA REDE WI-FI
 // ==========================================
 const char* ssid = "Robo_da_PUC";
-const char* password = "puc-campinas";
+const char* password = "12345678";
 ESP8266WebServer server(80);
 
 // ==========================================
-// MAPEAMENTO DE PINOS (CNC SHIELD V3)
+// MAPEAMENTO DE PINOS VALIDADO
 // ==========================================
 #define EN_PIN    D8   
 #define X_STEP    D2   
 #define X_DIR     D5   
+#define Y_STEP    D3
+#define Y_DIR     D6
+#define Z_STEP    D4
+#define Z_DIR     D7
 #define A_STEP    D12  
 #define A_DIR     D13  
-#define SERVO_PIN D11  
+
+#define SERVO1_PIN D9  // Endstop X-
+#define SERVO2_PIN D10 // Endstop Y+
 
 // ==========================================
 // OBJETOS DOS MOTORES
 // ==========================================
-AccelStepper motorA(AccelStepper::DRIVER, A_STEP, A_DIR);
 AccelStepper motorX(AccelStepper::DRIVER, X_STEP, X_DIR);
-Servo meuServo;
+AccelStepper motorY(AccelStepper::DRIVER, Y_STEP, Y_DIR);
+AccelStepper motorZ(AccelStepper::DRIVER, Z_STEP, Z_DIR);
+AccelStepper motorA(AccelStepper::DRIVER, A_STEP, A_DIR);
 
-// ==========================================
-// INTERFACE WEB DE TESTE (Para o Celular/PC)
-// ==========================================
-void handleRoot() {
-  String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-  html += "<style>";
-  html += "body { text-align:center; font-family: monospace; background-color: #1a1a1a; color: #00ff00; padding: 20px; }";
-  html += "input { width: 90%; height: 50px; font-size: 20px; margin: 20px 0; background: #333; color: #0f0; border: 1px solid #0f0; text-align: center; }";
-  html += "button { width: 90%; height: 60px; font-size: 18px; font-weight: bold; border-radius: 10px; cursor: pointer; border: none; }";
-  html += ".btn-send { background: #00ff00; color: #000; margin-bottom: 10px; }";
-  html += ".btn-stop { background: #ff0000; color: #fff; }";
-  html += ".info { color: #888; font-size: 14px; text-align: left; display: inline-block; }";
-  html += "</style></head><body>";
-  
-  html += "<h2>> CONSOLE API DO ROBO</h2>";
-  html += "<div class='info'><b>Comando:</b> VelA PassA VelX PassX Servo<br>";
-  html += "<b>Servo:</b> 0 = Fechar | 1 = Abrir (180&deg;)</div>";
-  
-  html += "<input type='text' id='c' placeholder='500 1000 500 -1000 1' onkeypress='if(event.keyCode==13) send()'>";
-  html += "<button class='btn-send' onclick='send()'>EXECUTAR COMANDO</button>";
-  html += "<button class='btn-stop' onclick=\"cmd('0 0 0 0 0')\">PARAR TUDO</button>";
-  
-  // O JavaScript agora fatiar o texto e monta a URL com os parâmetros (igual o Python fará)
-  html += "<script>";
-  html += "function send(){ cmd(document.getElementById('c').value); }";
-  html += "function cmd(v){";
-  html += "  var p = v.trim().split(/\\s+/);";
-  html += "  if(p.length == 5) {";
-  html += "    fetch('/run?vA='+p[0]+'&pA='+p[1]+'&vX='+p[2]+'&pX='+p[3]+'&sA='+p[4]);";
-  html += "  } else { alert('Erro: Digite exatamente 5 valores!'); }";
-  html += "}";
-  html += "</script></body></html>";
-  
-  server.send(200, "text/html", html);
-}
+Servo servo1;
+Servo servo2;
 
-// ==========================================
-// SETUP PRINCIPAL
-// ==========================================
 void setup() {
   Serial.begin(115200);
   
-  // Ativa os motores (EN_PIN em LOW significa drivers ligados)
   pinMode(EN_PIN, OUTPUT);
-  digitalWrite(EN_PIN, LOW);
+  digitalWrite(EN_PIN, LOW); // Mantém motores energizados/travados
 
-  // Configuração de aceleração para movimentos precisos e sem tranco
-  motorA.setAcceleration(1000.0);
+  // Configuração de aceleração de todos os motores
   motorX.setAcceleration(1000.0);
+  motorY.setAcceleration(1000.0);
+  motorZ.setAcceleration(1000.0);
+  motorA.setAcceleration(1000.0);
 
-  // Inicializa o Servo fechado
-  meuServo.attach(SERVO_PIN);
-  meuServo.write(0);
+  // Inicializa servos na posição zero
+  servo1.attach(SERVO1_PIN); servo1.write(0);
+  servo2.attach(SERVO2_PIN); servo2.write(0);
 
   // Inicia o Ponto de Acesso Wi-Fi
-  WiFi.softAP(ssid, password);
-  Serial.println("\n\n=== SISTEMA INICIADO ===");
-  Serial.print("Conecte no WiFi: "); Serial.println(ssid);
-  Serial.print("IP do Robo API: "); Serial.println(WiFi.softAPIP());
 
-  // ----------------------------------------
-  // ROTAS DO SERVIDOR WEB / API
-  // ----------------------------------------
-  
-  // 1. Rota raiz abre o painel HTML
-  server.on("/", handleRoot);
-  
-  // 2. Rota "/run" recebe os comandos (Onde o Python vai conectar)
+  WiFi.softAP(ssid, password);
+  Serial.println("\n\n=== SISTEMA WI-FI 6 EIXOS PRONTO ===");
+  Serial.print("Conecte no WiFi: "); Serial.println(ssid);
+  Serial.print("IP da API: "); Serial.println(WiFi.softAPIP());
+
+  // ==========================================
+  // ROTA DE COMANDO (Recebe a URL do Python)
+  // ==========================================
   server.on("/run", []() {
     
-    // Confirma se o Python/Site mandou todas as 5 variáveis
-    if (server.hasArg("vA") && server.hasArg("pA") && server.hasArg("vX") && server.hasArg("pX") && server.hasArg("sA")) {
+    // Verifica se recebemos TODOS os 10 dados na URL
+    if (server.hasArg("vX") && server.hasArg("pX") && 
+        server.hasArg("vY") && server.hasArg("pY") && 
+        server.hasArg("vZ") && server.hasArg("pZ") && 
+        server.hasArg("vA") && server.hasArg("pA") && 
+        server.hasArg("s1") && server.hasArg("s2")) {
       
       // Lê e converte os valores diretos da URL
-      float vA = server.arg("vA").toFloat();
-      long pA = server.arg("pA").toInt();
-      float vX = server.arg("vX").toFloat();
-      long pX = server.arg("pX").toInt();
-      int sA = server.arg("sA").toInt();
+      float vX = server.arg("vX").toFloat(); long pX = server.arg("pX").toInt();
+      float vY = server.arg("vY").toFloat(); long pY = server.arg("pY").toInt();
+      float vZ = server.arg("vZ").toFloat(); long pZ = server.arg("pZ").toInt();
+      float vA = server.arg("vA").toFloat(); long pA = server.arg("pA").toInt();
+      int s1   = server.arg("s1").toInt();   int s2   = server.arg("s2").toInt();
 
-      // Regra do Atalho para o Servo
-      if (sA == 1) sA = 180; 
+      // Atalhos dos Servos (0 = Fecha, 1 = Abre)
+      if (s1 == 1) s1 = 180;
+      if (s2 == 1) s2 = 180;
 
-      // Aplica as velocidades e passa o alvo pros motores
-      motorA.setMaxSpeed(abs(vA));
-      motorA.move(pA);
+      // Executa Motores
+      motorX.setMaxSpeed(abs(vX)); motorX.move(pX);
+      motorY.setMaxSpeed(abs(vY)); motorY.move(pY);
+      motorZ.setMaxSpeed(abs(vZ)); motorZ.move(pZ);
+      motorA.setMaxSpeed(abs(vA)); motorA.move(pA);
       
-      motorX.setMaxSpeed(abs(vX));
-      motorX.move(pX);
-      
-      // Move o servo com limite de segurança
-      meuServo.write(constrain(sA, 0, 180));
+      // Executa Servos
+      servo1.write(constrain(s1, 0, 180));
+      servo2.write(constrain(s2, 0, 180));
 
-      // Feedback no Monitor Serial para debugar o Python
-      Serial.printf("API Recebeu -> Motor A[%ld] | Motor X[%ld] | Servo[%d]\n", pA, pX, sA);
-      
-      // Responde pro Python que deu tudo certo
-      server.send(200, "text/plain", "Comando Aceito");
-    } 
-    else {
-      // Responde pro Python caso falte algum parâmetro (Ex: erro no envio)
-      Serial.println("API ERRO: URL Incompleta.");
-      server.send(400, "text/plain", "Erro: Faltam Parametros (vA, pA, vX, pX, sA)");
+      Serial.println("Comando API Executado!");
+      server.send(200, "text/plain", "OK");
+    } else {
+      Serial.println("Erro na API: Parametros faltando.");
+      server.send(400, "text/plain", "ERRO: Faltam Parametros na URL");
     }
   });
 
-  // Coloca o servidor no ar
   server.begin();
 }
 
-// ==========================================
-// LOOP INFINITO
-// ==========================================
 void loop() {
-  server.handleClient(); // Mantém o servidor HTTP "ouvindo" a rede
-  motorA.run();          // Processa passo a passo do Motor A
-  motorX.run();          // Processa passo a passo do Motor X
-  yield();               // Previne que o chip do WiFi trave e resete
+  server.handleClient(); // Escuta o Python pela rede
+  motorX.run();
+  motorY.run();
+  motorZ.run();
+  motorA.run();
+  yield(); // Mantém o Wi-Fi estável
 }

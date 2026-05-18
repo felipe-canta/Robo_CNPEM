@@ -55,11 +55,11 @@ def rad_movement(velocity, delta_r, dp):
 
 def tan_movement_corrigido(velocity, e, f, g, passo_mm, delta_alpha, R_f):
     vZ = velocity
-    sZ = int(-1 * delta_alpha * (R_f + f) * passo_mm)
+    sZ = int(delta_alpha * (R_f + f) * passo_mm)
 
     t = int(abs(sZ / vZ))
 
-    sY = int(delta_alpha * (R_f - g) * passo_mm)
+    sY = -1 * int(delta_alpha * (R_f - g) * passo_mm)
 
     vY = int(-1 * sY / t)
 

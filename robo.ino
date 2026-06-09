@@ -44,10 +44,10 @@ void setup() {
   digitalWrite(EN_PIN, LOW); // Mantém motores energizados/travados
 
   // Configuração de aceleração de todos os motores
-  motorX.setAcceleration(1000.0);
-  motorY.setAcceleration(1000.0);
-  motorZ.setAcceleration(1000.0);
-  motorA.setAcceleration(1000.0);
+  motorX.setAcceleration(10000.0);
+  motorY.setAcceleration(10000.0);
+  motorZ.setAcceleration(10000.0);
+  motorA.setAcceleration(10000.0);
 
   // Inicializa servos na posição zero
   servo1.attach(SERVO1_PIN); servo1.write(0);
@@ -84,11 +84,11 @@ void setup() {
       if (s2 == 1) s2 = 180;
 
       // Executa Motores
-      motorX.setMaxSpeed(abs(vX)); motorX.move(pX);
-      motorY.setMaxSpeed(abs(vY)); motorY.move(pY);
-      motorZ.setMaxSpeed(abs(vZ)); motorZ.move(pZ);
-      motorA.setMaxSpeed(abs(vA)); motorA.move(pA);
-      
+      if (abs(vX) > 0) { motorX.setMaxSpeed(abs(vX)); motorX.move(pX); } else { motorX.stop(); }
+      if (abs(vY) > 0) { motorY.setMaxSpeed(abs(vY)); motorY.move(pY); } else { motorY.stop(); }
+      if (abs(vZ) > 0) { motorZ.setMaxSpeed(abs(vZ)); motorZ.move(pZ); } else { motorZ.stop(); }
+      if (abs(vA) > 0) { motorA.setMaxSpeed(abs(vA)); motorA.move(pA); } else { motorA.stop(); }
+            
       // Executa Servos
       servo1.write(constrain(s1, 0, 180));
       servo2.write(constrain(s2, 0, 180));

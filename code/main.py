@@ -2,16 +2,33 @@ from requests.sessions import default_headers
 import math
 import requests
 import time
+import pyautogui
+import pynput
 
 
 def get_position():
     while True:
         pos = input("Digite a coordenada (X Y) [mm]: ").split()
-        result = list(map(float, pos))
         if len(pos) == 2:
-            return result
+            try:
+                return list(map(float, pos))
+            except ValueError:
+                print("ERRO: Digite apenas números válidos.")
         else:
             print("ERRO: Digitar apenas 2 números separados por espaço.")
+
+
+def get_position_mouse():
+    print("Posicione o cursor e pressione Enter...")
+    with pynput.keyboard.Events() as events:
+        for event in events:
+            if (
+                isinstance(event, pynput.keyboard.Events.Press)
+                and event.key == pynput.keyboard.Key.enter
+            ):
+                x, y = pyautogui.position()
+                print(f"Coordenadas capturadas: X={x} mm, Y={y} mm")
+                return x, y
 
 
 def parada_emergencia():
@@ -37,14 +54,55 @@ def enviar_comando(vX=0, pX=0, vY=0, pY=0, vZ=0, pZ=0, vA=0, pA=0, servo=0):
         print(f"[ERRO] Falha na conexão com o Wemos: {e}")
 
 
+def desenhar_cruz(velocity, passo_mm):
+    delay = 1
+    enviar_comando(vX=velocity, pX=-70 * passo_mm, vA=velocity, pA=70 * passo_mm)
+    time.sleep(delay)
+
+    enviar_comando(servo=1)
+    time.sleep(delay)
+    enviar_comando()
+    time.sleep(delay)
+    enviar_comando(vX=velocity, pX=5 * passo_mm, vA=velocity, pA=-5 * passo_mm)
+    time.sleep(delay)
+    enviar_comando(
+        vX=velocity, pX=20 * passo_mm, vA=velocity, pA=-20 * passo_mm, servo=1
+    )
+    time.sleep(delay)
+    enviar_comando(vX=velocity, pX=-30 * passo_mm, vA=velocity, pA=30 * passo_mm)
+    time.sleep(delay)
+    enviar_comando(
+        vX=velocity, pX=-20 * passo_mm, vA=velocity, pA=20 * passo_mm, servo=1
+    )
+    time.sleep(delay)
+    enviar_comando(vX=velocity, pX=25 * passo_mm, vA=velocity, pA=-25 * passo_mm)
+    time.sleep(delay)
+
+    enviar_comando(vY=velocity, pY=5 * passo_mm, vZ=velocity, pZ=-5 * passo_mm)
+    time.sleep(delay)
+    enviar_comando(
+        vY=velocity, pY=20 * passo_mm, vZ=velocity, pZ=-20 * passo_mm, servo=1
+    )
+    time.sleep(delay)
+    enviar_comando(vY=velocity, pY=-30 * passo_mm, vZ=velocity, pZ=30 * passo_mm)
+    time.sleep(delay)
+    enviar_comando(
+        vY=velocity, pY=-20 * passo_mm, vZ=velocity, pZ=20 * passo_mm, servo=1
+    )
+    time.sleep(delay)
+    enviar_comando(vY=velocity, pY=25 * passo_mm, vZ=velocity, pZ=-25 * passo_mm)
+    time.sleep(delay)
+
+    enviar_comando(vX=velocity, pX=70 * passo_mm, vA=velocity, pA=-70 * passo_mm)
+    time.sleep(delay)
+
+
 def rad_movement(velocity, delta_r, dp):
     vA = velocity
     pA = -round(delta_r / dp)
     vX = vA
-    # NOTA FÍSICA: Se as rodas X e A precisarem girar na mesma direção para andar reto, remova este -1
     pX = -1 * pA
 
-    # CORREÇÃO: Usa float para não zerar tempos quebrados
     t_real = abs(pA / float(vA)) if vA != 0 else 0
 
     print("\n>>> MOVIMENTO RADIAL <<<")
@@ -54,14 +112,11 @@ def rad_movement(velocity, delta_r, dp):
 
 
 def tan_movement(velocity, e, g, j, passo_mm, delta_alpha, R_f):
-    # CORREÇÃO: As variáveis g e j agora batem com o exec()
     delta_alpha = math.atan2(math.sin(delta_alpha), math.cos(delta_alpha))
 
-    # Rodas Y e Z: arco lateral usando as medidas g e j corretamente
     pZ = round(delta_alpha * (R_f + g) * passo_mm)
     pY = round(-delta_alpha * (R_f - j) * passo_mm)
 
-    # Rodas X e A: giro em torno do chassi
     pA = round(delta_alpha * e / 2 * passo_mm)
     pX = pA
 
@@ -76,7 +131,6 @@ def tan_movement(velocity, e, g, j, passo_mm, delta_alpha, R_f):
     vZ = abs(int(pZ / t_real))
     vA = abs(int(pA / t_real))
 
-    # Velocidade mínima de 10 para motores que precisam se mover
     if pX != 0 and vX == 0:
         vX = 10
     if pY != 0 and vY == 0:
@@ -89,7 +143,7 @@ def tan_movement(velocity, e, g, j, passo_mm, delta_alpha, R_f):
     print("\n>>> MOVIMENTO TANGENCIAL <<<")
     enviar_comando(vX=vX, pX=pX, vY=vY, pY=pY, vZ=vZ, pZ=pZ, vA=vA, pA=pA)
 
-    time.sleep(t_real + 1.5)  # Margem aumentada para compensar arrasto da curva
+    time.sleep(t_real + 1.5)
 
 
 def exec():
@@ -107,34 +161,88 @@ def exec():
 
     margem_erro = 1.0
 
+    x_cursor, y_cursor = get_position_mouse()
+
+    print("--- PARA ONDE ELE VAI? ---")
+    x_raw, y_raw = get_position()
+    x_f, y_f = float(x_raw), float(y_raw)
+    r_f = math.sqrt(x_f**2 + y_f**2)
+    alpha_f = math.atan2(y_f, x_f)
+
+    caminho_csv = "../medidas/medidas.csv"
+
+    # 1. Faz uma leitura inicial antes de começar o loop para registrar onde o laser está parado agora
+    try:
+        with open(caminho_csv, "r", encoding="utf-8", errors="ignore") as f:
+            conteudo_inicial = f.read().strip().replace(";", ",").split(",")
+            ultima_medida_processada = (
+                float(conteudo_inicial[0]),
+                float(conteudo_inicial[1]),
+            )
+    except:
+        # Se falhar ou o arquivo não existir, inicia zerado
+        ultima_medida_processada = (0.0, 0.0)
+
     while True:
-        print("\n--- ONDE O ROBÔ ESTÁ? ---")
-        x_raw, y_raw = get_position()
-        x_i, y_i = float(x_raw), float(y_raw)
+        print("\n--- INICIANDO NOVO CICLO DE MEDIÇÃO ---")
+
+        # 2. Executa o clique na tela (apenas uma vez por ciclo)
+        pyautogui.moveTo(x_cursor, y_cursor)
+        pyautogui.click()
+        print("[MOU-CLICK] Tela clicada. Aguardando processamento do arquivo...")
+
+        x_i, y_i = None, None
+
+        # 3. LOOP INTERNO: Escaneia o arquivo ATÉ que uma NOVA coordenada seja registrada
+        while True:
+            time.sleep(0.3)  # Intervalo de segurança para não travar o disco rígido
+            try:
+                with open(caminho_csv, "r", encoding="utf-8", errors="ignore") as f:
+                    conteudo = f.read().strip()
+
+                if not conteudo:
+                    continue
+
+                valores = conteudo.replace(";", ",").split(",")
+                if len(valores) < 2:
+                    continue
+
+                temp_x = float(valores[0].strip())
+                temp_y = float(valores[1].strip())
+
+                # SE a coordenada encontrada for diferente do histórico, o clique funcionou!
+                if (temp_x, temp_y) != ultima_medida_processada:
+                    x_i = temp_x
+                    y_i = temp_y
+                    break  # Sai do loop de escaneamento interno
+
+            except Exception:
+                continue  # Ignora erros momentâneos de leitura e tenta de novo rápido
+
+        # Se saímos do loop interno, significa que pegamos a medida do clique atual!
+        print(f"[PRODUÇÃO] Nova medida coletada com sucesso -> X: {x_i} Y: {y_i}")
+        ultima_medida_processada = (x_i, y_i)
+
         r_i = math.sqrt(x_i**2 + y_i**2)
         alpha_i = math.atan2(y_i, x_i)
 
-        print("--- PARA ONDE ELE VAI? ---")
-        x_raw, y_raw = get_position()
-        x_f, y_f = float(x_raw), float(y_raw)
-        r_f = math.sqrt(x_f**2 + y_f**2)
-        alpha_f = math.atan2(y_f, x_f)
-
-        # Condição de saída limpa se o alvo for alcançado
+        # Condição de saída se o robô atingir o destino
         if abs(x_i - x_f) <= margem_erro and abs(y_i - y_f) <= margem_erro:
-            print("[+] Destino alcançado!")
+            print("[+] Destino alcançado com sucesso!")
             break
 
         delta_r = r_f - r_i
         delta_alpha = alpha_f - alpha_i
 
-        # Lógica de aproximação dividida em R e T
+        # Executa os movimentos correspondentes
         if y_i <= y_f:
             rad_movement(velocity, delta_r, dp)
             tan_movement(velocity, e, g, j, passo_mm, delta_alpha, r_f)
         else:
             tan_movement(velocity, e, g, j, passo_mm, delta_alpha, r_i)
             rad_movement(velocity, delta_r, dp)
+
+    desenhar_cruz(velocity, passo_mm)
 
 
 if __name__ == "__main__":

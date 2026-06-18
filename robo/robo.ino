@@ -22,9 +22,14 @@ ESP8266WebServer server(80);
 #define Z_DIR     D7
 #define A_STEP    D12  
 #define A_DIR     D13  
+<<<<<<< HEAD:robo.ino
 
 #define SERVO1_PIN D9  // Endstop X-
 #define SERVO2_PIN D10 // Endstop Y+
+=======
+#define SERVO_PIN D11
+  
+>>>>>>> daniel:robo/robo.ino
 
 // ==========================================
 // OBJETOS DOS MOTORES
@@ -105,6 +110,7 @@ void setup() {
 }
 
 void loop() {
+<<<<<<< HEAD:robo.ino
   server.handleClient(); // Escuta o Python pela rede
   motorX.run();
   motorY.run();
@@ -112,3 +118,10 @@ void loop() {
   motorA.run();
   yield(); // Mantém o Wi-Fi estável
 }
+=======
+  server.handleClient(); // Mantém o servidor HTTP "ouvindo" a rede
+  motorA.run();          // Processa passo a passo do Motor A
+  motorX.run();          // Processa passo a passo do Motor X
+  yield();               // Previne que o chip do WiFi trave e resete
+}
+>>>>>>> daniel:robo/robo.ino
